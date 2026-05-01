@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 10 10 10;
+    --surface: 23 23 23;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-surface/60 backdrop-blur-md border border-border;
+  }
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
