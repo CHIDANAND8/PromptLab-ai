@@ -26,7 +26,7 @@ export default function Compare() {
     const streamPrompt = async (promptText: string, setOutputCb: React.Dispatch<React.SetStateAction<string>>) => {
       let fullOutput = '';
       try {
-        const API_URL = (import.meta as any).env.VITE_API_URL || '/api';
+        const API_URL = (import.meta as any).env.VITE_API_URL || 'https://promptlab-ai.onrender.com';
         const response = await fetch(`${API_URL}/prompt/test-stream`, {
           method: 'POST',
           headers: {

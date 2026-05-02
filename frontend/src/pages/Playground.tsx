@@ -17,7 +17,7 @@ export default function Playground() {
     setLoading(true);
     setOutput('');
     try {
-      const API_URL = (import.meta as any).env.VITE_API_URL || '/api';
+      const API_URL = (import.meta as any).env.VITE_API_URL || 'https://promptlab-ai.onrender.com';
       const response = await fetch(`${API_URL}/prompt/test-stream`, {
         method: 'POST',
         headers: {
