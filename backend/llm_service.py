@@ -20,7 +20,17 @@ if groq_api_key:
 
 DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "gpt-3.5-turbo")
 
+def map_model(model: str) -> str:
+    """Maps local/shorthand model names to valid cloud model identifiers."""
+    model_lower = model.lower()
+    if "llama3.2" in model_lower:
+        return "llama-3.2-11b-vision-preview"
+    if "llama3" in model_lower or "llama-3" in model_lower:
+        return "llama-3.1-8b-instant"
+    return model
+
 def generate_response(prompt: str, model: str, temperature: float, max_tokens: int):
+    model = map_model(model)
     # Mocking response if API key is dummy to allow running without valid key
     api_key = os.getenv("OPENAI_API_KEY", "dummy_key")
     if api_key == "dummy_key" or api_key == "your_openai_api_key_here":
@@ -50,6 +60,7 @@ def generate_response(prompt: str, model: str, temperature: float, max_tokens: i
         return f"[Fallback Mode - {model}] The AI processed your prompt: '{prompt}'. (Error details: {str(e)})"
 
 def stream_response(prompt: str, model: str, temperature: float, max_tokens: int):
+    model = map_model(model)
     api_key = os.getenv("OPENAI_API_KEY", "dummy_key")
     if api_key == "dummy_key" or api_key == "your_openai_api_key_here":
         mock_text = f"[Mocked {model} Output] The AI responded to: '{prompt}'. Parameters: temp={temperature}, max_tokens={max_tokens}."
