@@ -1,0 +1,5 @@
+- **Frontend (UI & State)**: React Vite (TS) client layer styled with custom-tailored dark glassmorphic Tailwind CSS, managing UX state with Zustand, and plotting prompt latency/analytics using Recharts.
+- **Backend & Middleware**: High-performance FastAPI server securing API routes with JWT/bcrypt authorization and validating schemas via Pydantic for playground configuration and response parsing.
+- **Database & Persistence**: SQLite relational database abstraction using SQLAlchemy ORM to store and query users, prompt variants, playgrounds, latency metrics, and evaluation history.
+- **AI Integration Pipeline**: Integration layer with OpenAI SDK (and custom hosts) to run parameterized playground tests (temperature, max tokens) and serve automated prompt refinement suggestions.
+- **Deployment & DevOps**: Single-command container deployment via Docker Compose, utilizing NGINX to serve the optimized frontend bundle and reverse-proxy backend traffic under a unified port.
