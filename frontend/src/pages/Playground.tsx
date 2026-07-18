@@ -5,9 +5,7 @@ import api from '../lib/api';
 
 export default function Playground() {
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('llama3.2:latest');
-  const [customModel, setCustomModel] = useState('');
-  const [isCustomModel, setIsCustomModel] = useState(false);
+  const [model, setModel] = useState('llama3.2');
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(256);
   const [output, setOutput] = useState('');
@@ -16,19 +14,18 @@ export default function Playground() {
   const [history, setHistory] = useState<any[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const getActiveModel = () => {
-    return isCustomModel ? customModel : model;
-  };
-
   useEffect(() => {
-    const localHist = localStorage.getItem('playground_history');
-    if (localHist) {
+    const fetchHistory = async () => {
       try {
-        setHistory(JSON.parse(localHist));
+        const res = await api.get('/prompt/history');
+        if (res.data && Array.isArray(res.data)) {
+          setHistory(res.data);
+        }
       } catch (err) {
-        console.error("Failed to parse local playground history:", err);
+        console.error("Failed to fetch history:", err);
       }
-    }
+    };
+    fetchHistory();
   }, []);
 
   const handleClear = () => {
@@ -41,21 +38,7 @@ export default function Playground() {
     if (history.length === 0) return;
     const nextIndex = (historyIndex + 1) % history.length;
     setPrompt(history[nextIndex].prompt_text);
-
-    const historicalModel = history[nextIndex].model_used || 'llama3.2:latest';
-    const presets = [
-      'llama3.2:latest', 'qwen2.5:1.5b', 'llava:latest', 'nomic-embed-text:latest',
-      'llama-3.3-70b-versatile', 'llama-3.1-8b-instant',
-      'gpt-3.5-turbo', 'gpt-4o', 'gpt-4-turbo'
-    ];
-    if (presets.includes(historicalModel)) {
-      setIsCustomModel(false);
-      setModel(historicalModel);
-    } else {
-      setIsCustomModel(true);
-      setCustomModel(historicalModel);
-    }
-
+    if (history[nextIndex].model_used) setModel(history[nextIndex].model_used);
     if (history[nextIndex].temperature) setTemperature(history[nextIndex].temperature);
     if (history[nextIndex].max_tokens) setMaxTokens(history[nextIndex].max_tokens);
     setHistoryIndex(nextIndex);
@@ -75,7 +58,7 @@ export default function Playground() {
         },
         body: JSON.stringify({
           prompt,
-          model: getActiveModel(),
+          model,
           temperature,
           max_tokens: maxTokens
         })
@@ -93,19 +76,15 @@ export default function Playground() {
           if (done) break;
           setOutput((prev) => prev + decoder.decode(value, { stream: true }));
         }
-        setHistory((prev) => {
-          const updated = [
-            {
-              prompt_text: prompt,
-              model_used: getActiveModel(),
-              temperature,
-              max_tokens: maxTokens
-            },
-            ...prev
-          ];
-          localStorage.setItem('playground_history', JSON.stringify(updated))
-          return updated;
-        });
+        setHistory((prev) => [
+          {
+            prompt_text: prompt,
+            model_used: model,
+            temperature,
+            max_tokens: maxTokens
+          },
+          ...prev
+        ]);
         setHistoryIndex(-1);
       }
     } catch (err) {
@@ -177,14 +156,14 @@ export default function Playground() {
           </div>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-textMuted block mb-2">Model</label>
+              <label className="text-sm text-textMuted block mb-2">Model (e.g. gpt-3.5-turbo, llama3)</label>
               <div className="flex items-center space-x-2">
                 <button
                   type="button"
                   onClick={handlePreviousPrompt}
                   disabled={history.length === 0}
                   title="Load previous prompt"
-                  className="p-2 bg-surface hover:bg-surfaceHighlight border border-border text-textMuted hover:text-white rounded-lg transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
+                  className="p-2 bg-surface hover:bg-surfaceHighlight border border-border text-textMuted hover:text-white rounded-lg transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
                 >
                   <RotateCcw className="w-4.5 h-4.5" />
                 </button>
@@ -193,60 +172,16 @@ export default function Playground() {
                   onClick={handleClear}
                   disabled={!prompt && !output}
                   title="Clear playground"
-                  className="p-2 bg-surface hover:bg-red-500/10 border border-border hover:border-red-500/20 text-textMuted hover:text-red-400 rounded-lg transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
+                  className="p-2 bg-surface hover:bg-red-500/10 border border-border hover:border-red-500/20 text-textMuted hover:text-red-400 rounded-lg transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
                 >
                   <Trash2 className="w-4.5 h-4.5" />
                 </button>
-                {!isCustomModel ? (
-                  <select
-                    value={model}
-                    onChange={(e) => {
-                      if (e.target.value === 'custom') {
-                        setIsCustomModel(true);
-                      } else {
-                        setModel(e.target.value);
-                      }
-                    }}
-                    className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:border-primary text-white cursor-pointer"
-                  >
-                    <optgroup label="Local Ollama Models">
-                      <option value="llama3.2:latest">Llama 3.2 (Local)</option>
-                      <option value="qwen2.5:1.5b">Qwen 2.5 1.5B (Local)</option>
-                      <option value="llava:latest">LLaVA Vision (Local)</option>
-                      <option value="nomic-embed-text:latest">Nomic Embed (Local)</option>
-                    </optgroup>
-                    <optgroup label="Groq Cloud Models">
-                      <option value="llama-3.3-70b-versatile">Llama 3.3 70B (Groq)</option>
-                      <option value="llama-3.1-8b-instant">Llama 3.1 8B (Groq)</option>
-                    </optgroup>
-                    <optgroup label="OpenAI Cloud Models">
-                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                      <option value="gpt-4o">GPT-4o</option>
-                      <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                    </optgroup>
-                    <option value="custom">✍️ Custom Model...</option>
-                  </select>
-                ) : (
-                  <div className="flex-1 flex gap-2">
-                    <input
-                      type="text"
-                      value={customModel}
-                      onChange={(e) => setCustomModel(e.target.value)}
-                      placeholder="Custom model ID..."
-                      className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary text-white"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsCustomModel(false);
-                        setModel('llama3.2:latest');
-                      }}
-                      className="text-xs bg-surface border border-border hover:bg-surfaceHighlight text-textMuted hover:text-white px-2 rounded-lg transition-colors shrink-0"
-                    >
-                      Presets
-                    </button>
-                  </div>
-                )}
+                <input 
+                  type="text"
+                  value={model} 
+                  onChange={(e) => setModel(e.target.value)}
+                  className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary text-white"
+                />
               </div>
             </div>
             <div>

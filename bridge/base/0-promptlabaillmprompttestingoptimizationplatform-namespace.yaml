@@ -1,0 +1,8 @@
+#! 0-promptlabaillmprompttestingoptimizationplatform-namespace.yaml
+# Generated code, do not edit
+apiVersion: v1
+kind: Namespace
+metadata:
+    name: promptlabaillmprompttestingoptimizationplatform
+    labels:
+        com.docker.compose.project: promptlabaillmprompttestingoptimizationplatform

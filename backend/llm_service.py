@@ -17,18 +17,9 @@ if is_in_docker:
 
 IS_LOCAL = "localhost" in openai_base_url or "127.0.0.1" in openai_base_url or "0.0.0.0" in openai_base_url or "host.docker.internal" in openai_base_url
 
-# Dedicated client for local Ollama container integration
-local_ollama_client = None
-if IS_LOCAL:
-    local_ollama_client = OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY", "dummy_key"),
-        base_url=openai_base_url
-    )
-
-# Dedicated client for pure OpenAI cloud models
-openai_cloud_client = OpenAI(
+client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY", "dummy_key"),
-    base_url="https://api.openai.com/v1"
+    base_url=openai_base_url
 )
 
 groq_api_key = os.getenv("GROQ_API_KEY")
@@ -77,29 +68,8 @@ def stream_demo_fallback(prompt: str, model: str, temperature: float, max_tokens
         yield word + " "
         time.sleep(0.04)
 
-def get_active_client_and_model(model: str):
-    is_gpt = model.lower().startswith("gpt-")
-    is_groq_only = "versatile" in model.lower() or "instant" in model.lower() or "preview" in model.lower() or model.lower().startswith("llama-3.1-") or model.lower().startswith("llama-3.3-")
-    
-    if is_gpt:
-        return openai_cloud_client, model
-    elif is_groq_only:
-        if groq_client:
-            return groq_client, model
-        else:
-            return openai_cloud_client, "gpt-3.5-turbo"
-    else:
-        if local_ollama_client:
-            return local_ollama_client, model
-        else:
-            if groq_client:
-                return groq_client, map_model(model, "groq")
-            else:
-                return openai_cloud_client, "gpt-3.5-turbo"
-
 def generate_response(prompt: str, model: str, temperature: float, max_tokens: int):
     is_gpt = model.lower().startswith("gpt-")
-    is_groq_only = "versatile" in model.lower() or "instant" in model.lower() or "preview" in model.lower() or model.lower().startswith("llama-3.1-") or model.lower().startswith("llama-3.3-")
     
     primary_client = None
     primary_model = model
@@ -107,52 +77,34 @@ def generate_response(prompt: str, model: str, temperature: float, max_tokens: i
     secondary_model = model
     
     if is_gpt:
-        primary_client = openai_cloud_client
+        primary_client = client
+        primary_model = model
+    elif IS_LOCAL:
+        primary_client = client
         primary_model = model
         if groq_client:
             secondary_client = groq_client
-            secondary_model = "llama-3.3-70b-versatile"
-    elif is_groq_only:
+            secondary_model = map_model(model, "groq")
+    else:
         if groq_client:
             primary_client = groq_client
-            primary_model = model
-            secondary_client = openai_cloud_client
-            secondary_model = "gpt-3.5-turbo"
+            primary_model = map_model(model, "groq")
+            secondary_client = client
+            secondary_model = model
         else:
-            primary_client = openai_cloud_client
-            primary_model = "gpt-3.5-turbo"
-    else:
-        if local_ollama_client:
-            primary_client = local_ollama_client
+            primary_client = client
             primary_model = model
-            if groq_client:
-                secondary_client = groq_client
-                secondary_model = map_model(model, "groq")
-            else:
-                secondary_client = openai_cloud_client
-                secondary_model = "gpt-3.5-turbo"
-        else:
-            if groq_client:
-                primary_client = groq_client
-                primary_model = map_model(model, "groq")
-                secondary_client = openai_cloud_client
-                secondary_model = "gpt-3.5-turbo"
-            else:
-                primary_client = openai_cloud_client
-                primary_model = "gpt-3.5-turbo"
-
-    def check_keys(target_client):
-        if target_client == openai_cloud_client:
-            api_key = os.getenv("OPENAI_API_KEY", "dummy_key")
-            if api_key in ("dummy_key", "your_openai_api_key_here", "") or api_key.startswith("sk-proj-your"):
-                raise ValueError("PlaceHolder/Dummy OpenAI API key detected")
-        if target_client == groq_client:
-            api_key = os.getenv("GROQ_API_KEY", "")
-            if api_key in ("your_groq_api_key_here", "", "dummy") or api_key.startswith("gsk_your"):
-                raise ValueError("PlaceHolder/Dummy Groq API key detected")
 
     try:
-        check_keys(primary_client)
+        api_key_to_check = os.getenv("OPENAI_API_KEY", "dummy_key")
+        if primary_client == client and not IS_LOCAL:
+            if api_key_to_check in ("dummy_key", "your_openai_api_key_here", ""):
+                raise ValueError("Dummy OpenAI API key detected")
+        if primary_client == groq_client:
+            groq_key = os.getenv("GROQ_API_KEY", "")
+            if groq_key in ("your_groq_api_key_here", ""):
+                raise ValueError("Dummy Groq API key detected")
+
         response = primary_client.chat.completions.create(
             model=primary_model,
             messages=[{"role": "user", "content": prompt}],
@@ -164,7 +116,14 @@ def generate_response(prompt: str, model: str, temperature: float, max_tokens: i
         print(f"Primary client error: {e_primary}")
         if secondary_client:
             try:
-                check_keys(secondary_client)
+                if secondary_client == client and not IS_LOCAL:
+                    if api_key_to_check in ("dummy_key", "your_openai_api_key_here", ""):
+                        raise ValueError("Dummy OpenAI API key detected")
+                if secondary_client == groq_client:
+                    groq_key = os.getenv("GROQ_API_KEY", "")
+                    if groq_key in ("your_groq_api_key_here", ""):
+                        raise ValueError("Dummy Groq API key detected")
+
                 response = secondary_client.chat.completions.create(
                     model=secondary_model,
                     messages=[{"role": "user", "content": prompt}],
@@ -180,7 +139,6 @@ def generate_response(prompt: str, model: str, temperature: float, max_tokens: i
 
 def stream_response(prompt: str, model: str, temperature: float, max_tokens: int):
     is_gpt = model.lower().startswith("gpt-")
-    is_groq_only = "versatile" in model.lower() or "instant" in model.lower() or "preview" in model.lower() or model.lower().startswith("llama-3.1-") or model.lower().startswith("llama-3.3-")
     
     primary_client = None
     primary_model = model
@@ -188,52 +146,34 @@ def stream_response(prompt: str, model: str, temperature: float, max_tokens: int
     secondary_model = model
     
     if is_gpt:
-        primary_client = openai_cloud_client
+        primary_client = client
+        primary_model = model
+    elif IS_LOCAL:
+        primary_client = client
         primary_model = model
         if groq_client:
             secondary_client = groq_client
-            secondary_model = "llama-3.3-70b-versatile"
-    elif is_groq_only:
+            secondary_model = map_model(model, "groq")
+    else:
         if groq_client:
             primary_client = groq_client
-            primary_model = model
-            secondary_client = openai_cloud_client
-            secondary_model = "gpt-3.5-turbo"
+            primary_model = map_model(model, "groq")
+            secondary_client = client
+            secondary_model = model
         else:
-            primary_client = openai_cloud_client
-            primary_model = "gpt-3.5-turbo"
-    else:
-        if local_ollama_client:
-            primary_client = local_ollama_client
+            primary_client = client
             primary_model = model
-            if groq_client:
-                secondary_client = groq_client
-                secondary_model = map_model(model, "groq")
-            else:
-                secondary_client = openai_cloud_client
-                secondary_model = "gpt-3.5-turbo"
-        else:
-            if groq_client:
-                primary_client = groq_client
-                primary_model = map_model(model, "groq")
-                secondary_client = openai_cloud_client
-                secondary_model = "gpt-3.5-turbo"
-            else:
-                primary_client = openai_cloud_client
-                primary_model = "gpt-3.5-turbo"
-
-    def check_keys(target_client):
-        if target_client == openai_cloud_client:
-            api_key = os.getenv("OPENAI_API_KEY", "dummy_key")
-            if api_key in ("dummy_key", "your_openai_api_key_here", "") or api_key.startswith("sk-proj-your"):
-                raise ValueError("PlaceHolder/Dummy OpenAI API key detected")
-        if target_client == groq_client:
-            api_key = os.getenv("GROQ_API_KEY", "")
-            if api_key in ("your_groq_api_key_here", "", "dummy") or api_key.startswith("gsk_your"):
-                raise ValueError("PlaceHolder/Dummy Groq API key detected")
 
     try:
-        check_keys(primary_client)
+        api_key_to_check = os.getenv("OPENAI_API_KEY", "dummy_key")
+        if primary_client == client and not IS_LOCAL:
+            if api_key_to_check in ("dummy_key", "your_openai_api_key_here", ""):
+                raise ValueError("Dummy OpenAI API key detected")
+        if primary_client == groq_client:
+            groq_key = os.getenv("GROQ_API_KEY", "")
+            if groq_key in ("your_groq_api_key_here", ""):
+                raise ValueError("Dummy Groq API key detected")
+
         response = primary_client.chat.completions.create(
             model=primary_model,
             messages=[{"role": "user", "content": prompt}],
@@ -248,7 +188,14 @@ def stream_response(prompt: str, model: str, temperature: float, max_tokens: int
         print(f"Primary streaming error: {e_primary}")
         if secondary_client:
             try:
-                check_keys(secondary_client)
+                if secondary_client == client and not IS_LOCAL:
+                    if api_key_to_check in ("dummy_key", "your_openai_api_key_here", ""):
+                        raise ValueError("Dummy OpenAI API key detected")
+                if secondary_client == groq_client:
+                    groq_key = os.getenv("GROQ_API_KEY", "")
+                    if groq_key in ("your_groq_api_key_here", ""):
+                        raise ValueError("Dummy Groq API key detected")
+
                 response = secondary_client.chat.completions.create(
                     model=secondary_model,
                     messages=[{"role": "user", "content": prompt}],
@@ -268,16 +215,25 @@ def stream_response(prompt: str, model: str, temperature: float, max_tokens: int
                 yield chunk
 
 def suggest_improvement(prompt: str):
-    active_client, eval_model = get_active_client_and_model(DEFAULT_MODEL)
+    is_gpt = DEFAULT_MODEL.lower().startswith("gpt-")
+    active_client = client if is_gpt else (groq_client if groq_client else client)
+    eval_model = DEFAULT_MODEL
+    
+    if active_client == groq_client:
+        eval_model = map_model(DEFAULT_MODEL, "groq")
+        if "gpt-" in eval_model:
+            active_client = client
+            eval_model = DEFAULT_MODEL
+            
     try:
-        if active_client == openai_cloud_client:
-            api_key = os.getenv("OPENAI_API_KEY", "dummy_key")
-            if api_key in ("dummy_key", "your_openai_api_key_here", "") or api_key.startswith("sk-proj-your"):
-                raise ValueError("Dummy OpenAI API key detected")
+        api_key_to_check = os.getenv("OPENAI_API_KEY", "dummy_key")
+        if active_client == client and not IS_LOCAL:
+            if api_key_to_check in ("dummy_key", "your_openai_api_key_here", ""):
+                raise ValueError("Dummy OpenAI key")
         if active_client == groq_client:
-            api_key = os.getenv("GROQ_API_KEY", "")
-            if api_key in ("your_groq_api_key_here", "", "dummy") or api_key.startswith("gsk_your"):
-                raise ValueError("Dummy Groq API key detected")
+            groq_key = os.getenv("GROQ_API_KEY", "")
+            if groq_key in ("your_groq_api_key_here", ""):
+                raise ValueError("Dummy Groq key")
 
         response = active_client.chat.completions.create(
             model=eval_model,
@@ -295,16 +251,25 @@ def suggest_improvement(prompt: str):
 
 def evaluate_comparison(prompt_a: str, prompt_b: str, output_a: str, output_b: str):
     import json
-    active_client, eval_model = get_active_client_and_model(DEFAULT_MODEL)
+    is_gpt = DEFAULT_MODEL.lower().startswith("gpt-")
+    active_client = client if is_gpt else (groq_client if groq_client else client)
+    eval_model = DEFAULT_MODEL
+    
+    if active_client == groq_client:
+        eval_model = map_model(DEFAULT_MODEL, "groq")
+        if "gpt-" in eval_model:
+            active_client = client
+            eval_model = DEFAULT_MODEL
+
     try:
-        if active_client == openai_cloud_client:
-            api_key = os.getenv("OPENAI_API_KEY", "dummy_key")
-            if api_key in ("dummy_key", "your_openai_api_key_here", "") or api_key.startswith("sk-proj-your"):
-                raise ValueError("Dummy OpenAI API key detected")
+        api_key_to_check = os.getenv("OPENAI_API_KEY", "dummy_key")
+        if active_client == client and not IS_LOCAL:
+            if api_key_to_check in ("dummy_key", "your_openai_api_key_here", ""):
+                raise ValueError("Dummy OpenAI key")
         if active_client == groq_client:
-            api_key = os.getenv("GROQ_API_KEY", "")
-            if api_key in ("your_groq_api_key_here", "", "dummy") or api_key.startswith("gsk_your"):
-                raise ValueError("Dummy Groq API key detected")
+            groq_key = os.getenv("GROQ_API_KEY", "")
+            if groq_key in ("your_groq_api_key_here", ""):
+                raise ValueError("Dummy Groq key")
 
         response = active_client.chat.completions.create(
             model=eval_model,
