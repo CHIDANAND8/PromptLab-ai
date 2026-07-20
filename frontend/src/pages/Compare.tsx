@@ -171,13 +171,31 @@ export default function Compare() {
           >
             <Trash2 className="w-4 h-4" />
           </button>
-          <input 
-            type="text"
+          <select
             value={model} 
             onChange={(e) => setModel(e.target.value)}
-            placeholder="Model (e.g. gpt-3.5-turbo, llama3)"
-            className="w-48 bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary text-white"
-          />
+            className="w-48 bg-surface border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary text-white appearance-none cursor-pointer"
+            style={{ backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: '16px', paddingRight: '28px' }}
+          >
+            <optgroup label="Groq Cloud" className="bg-surface text-white">
+              <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile (Groq)</option>
+              <option value="llama-3.1-8b-instant">llama-3.1-8b-instant (Groq)</option>
+              <option value="mixtral-8x7b-32768">mixtral-8x7b-32768 (Groq)</option>
+              <option value="gemma2-9b-it">gemma2-9b-it (Groq)</option>
+            </optgroup>
+            <optgroup label="OpenAI Cloud" className="bg-surface text-white">
+              <option value="gpt-4o">gpt-4o (OpenAI)</option>
+              <option value="gpt-4o-mini">gpt-4o-mini (OpenAI)</option>
+              <option value="gpt-4">gpt-4 (OpenAI)</option>
+              <option value="gpt-3.5-turbo">gpt-3.5-turbo (OpenAI)</option>
+            </optgroup>
+            <optgroup label="Local (Ollama)" className="bg-surface text-white">
+              <option value="llama3.2">llama3.2 (Ollama)</option>
+              <option value="qwen2.5:1.5b">qwen2.5:1.5b (Ollama)</option>
+              <option value="llava">llava (Ollama)</option>
+              <option value="nomic-embed-text">nomic-embed-text (Ollama)</option>
+            </optgroup>
+          </select>
           <button
             onClick={handleCompare}
             disabled={loading || !promptA || !promptB}

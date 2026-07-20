@@ -36,6 +36,9 @@ def map_model(model: str, provider: str = "openai") -> str:
     """Maps local/shorthand model names to valid identifiers depending on target provider."""
     model_lower = model.lower()
     if provider == "groq":
+        # If it's already an active fully specified identifier, return directly
+        if model_lower in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768", "gemma2-9b-it"]:
+            return model
         if "llama3.2" in model_lower:
             return "llama-3.3-70b-versatile"
         if "llama3" in model_lower or "llama-3" in model_lower:
